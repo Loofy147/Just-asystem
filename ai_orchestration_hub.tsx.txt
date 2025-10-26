@@ -1,0 +1,654 @@
+import React, { useState, useEffect } from 'react';
+import { Brain, Sparkles, Zap, Network, Database, Code, FileText, Search, Target, Compass, Heart, Award, Globe, Rocket, Shield, Eye, Atom, Binary, TrendingUp, Cpu, Layers, GitBranch, Clock, DollarSign, AlertTriangle, CheckCircle, XCircle, Loader, Play, Pause, RotateCcw } from 'lucide-react';
+
+const NexusV2 = () => {
+  const [activeSection, setActiveSection] = useState('research');
+  const [logs, setLogs] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [researchPrompt, setResearchPrompt] = useState('');
+  const [selectedDomain, setSelectedDomain] = useState('agi_architecture');
+  const [useWebSearch, setUseWebSearch] = useState(true);
+  const [results, setResults] = useState([]);
+  const [phaseStatus, setPhaseStatus] = useState({
+    foundation: 'idle',
+    architecture: 'idle',
+    implementation: 'idle',
+    impact: 'idle',
+    synthesis: 'idle'
+  });
+  const [metrics, setMetrics] = useState({
+    tokensUsed: 0,
+    estimatedCost: 0,
+    executionTime: 0,
+    apiCalls: 0
+  });
+  const [savedResearch, setSavedResearch] = useState([]);
+
+  useEffect(() => {
+    loadSavedResearch();
+  }, []);
+
+  const loadSavedResearch = async () => {
+    try {
+      const keys = await window.storage.list('research:');
+      if (keys && keys.keys) {
+        const sessions = [];
+        for (const key of keys.keys.slice(0, 5)) {
+          const data = await window.storage.get(key);
+          if (data) {
+            sessions.push(JSON.parse(data.value));
+          }
+        }
+        setSavedResearch(sessions);
+      }
+    } catch (error) {
+      console.log('No saved research found');
+    }
+  };
+
+  const addLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev, { timestamp, message, type }].slice(-50));
+  };
+
+  const updatePhaseStatus = (phase, status) => {
+    setPhaseStatus(prev => ({ ...prev, [phase]: status }));
+  };
+
+  const updateMetrics = (tokensUsed, apiCalls, executionTime) => {
+    setMetrics(prev => ({
+      tokensUsed: prev.tokensUsed + tokensUsed,
+      estimatedCost: prev.estimatedCost + (tokensUsed * 0.000003), // Approximate cost
+      executionTime: prev.executionTime + executionTime,
+      apiCalls: prev.apiCalls + apiCalls
+    }));
+  };
+
+  const callAIWithRetry = async (prompt, options = {}, maxRetries = 3) => {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const startTime = Date.now();
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: options.maxTokens || 1000,
+            tools: options.tools || [],
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+        const data = await response.json();
+        const executionTime = Date.now() - startTime;
+        
+        const text = data.content
+          .filter(item => item.type === 'text')
+          .map(item => item.text)
+          .join('\n');
+
+        updateMetrics(1000, 1, executionTime); // Approximate tokens
+        
+        return { success: true, text, executionTime };
+      } catch (error) {
+        if (attempt === maxRetries - 1) throw error;
+        const delay = Math.pow(2, attempt) * 1000;
+        addLog(`Retry attempt ${attempt + 1} after ${delay}ms...`, 'warning');
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  };
+
+  const parseJSONSafely = (text, fallback = {}) => {
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch (e) {
+      addLog('JSON parsing failed - using fallback', 'warning');
+      return fallback;
+    }
+  };
+
+  const executeResearch = async () => {
+    if (!researchPrompt.trim()) {
+      addLog('Please enter a research prompt', 'error');
+      return;
+    }
+
+    setIsProcessing(true);
+    setResults([]);
+    setMetrics({ tokensUsed: 0, estimatedCost: 0, executionTime: 0, apiCalls: 0 });
+    
+    const sessionId = `research:${Date.now()}`;
+    addLog('🚀 Initiating NEXUS v2.0 Research Pipeline', 'success');
+
+    try {
+      // PHASE 1: Foundation Research
+      updatePhaseStatus('foundation', 'active');
+      addLog('🔬 Phase 1: Foundation Research' + (useWebSearch ? ' + Web Search' : ''), 'info');
+
+      const foundationPrompt = `Analyze this AGI research query: "${researchPrompt}"
+
+Provide:
+1. Current SOTA approaches (2024-2025)
+2. Fundamental limitations
+3. Unexplored directions
+4. Mathematical foundations
+
+Be technical and specific.`;
+
+      const foundation = await callAIWithRetry(foundationPrompt, {
+        tools: useWebSearch ? [{ type: "web_search_20250305", name: "web_search" }] : []
+      });
+
+      setResults(prev => [...prev, {
+        phase: 'Foundation Research',
+        output: foundation.text,
+        time: foundation.executionTime,
+        timestamp: new Date().toISOString()
+      }]);
+
+      updatePhaseStatus('foundation', 'complete');
+      addLog(`✅ Foundation complete (${(foundation.executionTime / 1000).toFixed(1)}s)`, 'success');
+
+      // PHASE 2-4: PARALLEL EXECUTION
+      addLog('⚡ Starting parallel execution: Architecture + Implementation + Impact', 'info');
+      updatePhaseStatus('architecture', 'active');
+      updatePhaseStatus('implementation', 'active');
+      updatePhaseStatus('impact', 'active');
+
+      const parallelPromises = [
+        // Architecture
+        callAIWithRetry(`Research context: ${foundation.text.slice(0, 600)}
+
+Design revolutionary architecture for: "${researchPrompt}"
+
+Return ONLY JSON:
+{
+  "name": "Architecture name",
+  "innovation": "Core breakthrough",
+  "components": ["key components"],
+  "complexity": 1-10,
+  "impact": "Transformative capability"
+}`),
+        
+        // Implementation
+        callAIWithRetry(`Research: ${foundation.text.slice(0, 600)}
+
+Production implementation strategy for: "${researchPrompt}"
+
+Return ONLY JSON:
+{
+  "stack": ["technologies"],
+  "phases": ["Phase 1: ...", "Phase 2: ..."],
+  "challenges": ["critical challenges"],
+  "timeline": "estimated duration"
+}`),
+        
+        // Impact
+        callAIWithRetry(`Technology: ${foundation.text.slice(0, 600)}
+
+Cross-industry impact analysis for: "${researchPrompt}"
+
+Return ONLY JSON:
+{
+  "industries": [
+    {
+      "name": "Industry",
+      "problem": "Current problem",
+      "solution": "How this solves it",
+      "value": "Economic impact"
+    }
+  ]
+}`)
+      ];
+
+      const [architecture, implementation, impact] = await Promise.all(parallelPromises);
+
+      const parsedArchitecture = parseJSONSafely(architecture.text, { name: "Novel Architecture" });
+      const parsedImplementation = parseJSONSafely(implementation.text, { stack: [] });
+      const parsedImpact = parseJSONSafely(impact.text, { industries: [] });
+
+      setResults(prev => [
+        ...prev,
+        { phase: 'Architecture', output: parsedArchitecture, time: architecture.executionTime, timestamp: new Date().toISOString() },
+        { phase: 'Implementation', output: parsedImplementation, time: implementation.executionTime, timestamp: new Date().toISOString() },
+        { phase: 'Impact', output: parsedImpact, time: impact.executionTime, timestamp: new Date().toISOString() }
+      ]);
+
+      updatePhaseStatus('architecture', 'complete');
+      updatePhaseStatus('implementation', 'complete');
+      updatePhaseStatus('impact', 'complete');
+      
+      addLog(`✅ Parallel execution complete`, 'success');
+
+      // PHASE 5: Synthesis
+      updatePhaseStatus('synthesis', 'active');
+      addLog('💡 Phase 5: Breakthrough Synthesis', 'info');
+
+      const synthesisPrompt = `Synthesize breakthrough insights from:
+
+Architecture: ${JSON.stringify(parsedArchitecture)}
+Implementation: ${JSON.stringify(parsedImplementation)}
+Impact: ${JSON.stringify(parsedImpact)}
+
+Return ONLY JSON:
+{
+  "breakthroughs": ["key insight 1", "key insight 2"],
+  "scores": {
+    "innovation": 1-10,
+    "feasibility": 1-10,
+    "impact": 1-10
+  },
+  "nextSteps": ["action 1", "action 2"]
+}`;
+
+      const synthesis = await callAIWithRetry(synthesisPrompt);
+      const parsedSynthesis = parseJSONSafely(synthesis.text, { breakthroughs: [], scores: {} });
+
+      setResults(prev => [...prev, {
+        phase: 'Synthesis',
+        output: parsedSynthesis,
+        time: synthesis.executionTime,
+        timestamp: new Date().toISOString()
+      }]);
+
+      updatePhaseStatus('synthesis', 'complete');
+      addLog('🎉 Research pipeline complete!', 'success');
+
+      // Save to storage
+      try {
+        await window.storage.set(sessionId, JSON.stringify({
+          prompt: researchPrompt,
+          domain: selectedDomain,
+          results,
+          metrics,
+          timestamp: new Date().toISOString()
+        }));
+        addLog('💾 Research saved to storage', 'success');
+        await loadSavedResearch();
+      } catch (storageError) {
+        addLog('⚠️ Could not save research', 'warning');
+      }
+
+    } catch (error) {
+      addLog(`❌ Pipeline failed: ${error.message}`, 'error');
+      console.error('Research error:', error);
+    } finally {
+      setIsProcessing(false);
+      Object.keys(phaseStatus).forEach(phase => updatePhaseStatus(phase, 'idle'));
+    }
+  };
+
+  const clearResearch = () => {
+    setResults([]);
+    setLogs([]);
+    setMetrics({ tokensUsed: 0, estimatedCost: 0, executionTime: 0, apiCalls: 0 });
+    Object.keys(phaseStatus).forEach(phase => updatePhaseStatus(phase, 'idle'));
+    addLog('🔄 Research cleared', 'info');
+  };
+
+  const PhaseIndicator = ({ phase, label }) => {
+    const status = phaseStatus[phase];
+    return (
+      <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${
+        status === 'complete' ? 'bg-green-900/20 border-green-600' :
+        status === 'active' ? 'bg-yellow-900/20 border-yellow-600 animate-pulse' :
+        status === 'error' ? 'bg-red-900/20 border-red-600' :
+        'bg-slate-800/50 border-slate-700'
+      }`}>
+        {status === 'complete' && <CheckCircle className="w-4 h-4 text-green-400" />}
+        {status === 'active' && <Loader className="w-4 h-4 text-yellow-400 animate-spin" />}
+        {status === 'error' && <XCircle className="w-4 h-4 text-red-400" />}
+        {status === 'idle' && <div className="w-4 h-4 rounded-full bg-slate-600" />}
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-purple-950 text-white">
+      {/* Header */}
+      <div className="border-b border-purple-800/30 bg-black/40 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl blur-lg opacity-50"></div>
+                <div className="relative p-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl">
+                  <Brain className="w-8 h-8" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+                  NEXUS v2.0
+                </h1>
+                <p className="text-sm text-purple-300">Production AGI Research Platform</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="px-4 py-2 bg-green-500/20 border border-green-500/50 rounded-lg">
+                <span className="text-green-300 text-sm font-semibold flex items-center">
+                  <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                  ONLINE
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Metrics Bar */}
+      <div className="bg-slate-900/50 border-b border-slate-700/50">
+        <div className="max-w-7xl mx-auto px-6 py-3">
+          <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-4 h-4 text-blue-400" />
+              <span className="text-slate-400">Time:</span>
+              <span className="font-bold text-blue-300">{(metrics.executionTime / 1000).toFixed(1)}s</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Zap className="w-4 h-4 text-yellow-400" />
+              <span className="text-slate-400">API Calls:</span>
+              <span className="font-bold text-yellow-300">{metrics.apiCalls}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Database className="w-4 h-4 text-purple-400" />
+              <span className="text-slate-400">Tokens:</span>
+              <span className="font-bold text-purple-300">~{metrics.tokensUsed}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <DollarSign className="w-4 h-4 text-green-400" />
+              <span className="text-slate-400">Cost:</span>
+              <span className="font-bold text-green-300">${metrics.estimatedCost.toFixed(4)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-3 gap-6">
+          {/* Control Panel */}
+          <div className="col-span-1 space-y-4">
+            <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <h2 className="text-lg font-bold mb-4 flex items-center">
+                <Rocket className="w-5 h-5 mr-2 text-purple-400" />
+                Research Controls
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-slate-400 mb-2 block">Research Query</label>
+                  <textarea
+                    value={researchPrompt}
+                    onChange={(e) => setResearchPrompt(e.target.value)}
+                    placeholder="e.g., 'Design a neural architecture that enables recursive self-improvement in language models'"
+                    className="w-full h-32 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm resize-none focus:border-purple-500 focus:outline-none"
+                    disabled={isProcessing}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-slate-400 mb-2 block">Domain</label>
+                  <select
+                    value={selectedDomain}
+                    onChange={(e) => setSelectedDomain(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                    disabled={isProcessing}
+                  >
+                    <option value="agi_architecture">AGI Architecture</option>
+                    <option value="reasoning_systems">Advanced Reasoning</option>
+                    <option value="embodied_ai">Embodied AI</option>
+                    <option value="emergence_theory">Emergence Theory</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <div className="flex items-center space-x-2">
+                    <Search className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm">Web Search</span>
+                  </div>
+                  <button
+                    onClick={() => setUseWebSearch(!useWebSearch)}
+                    className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
+                      useWebSearch 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-slate-700 text-slate-400'
+                    }`}
+                    disabled={isProcessing}
+                  >
+                    {useWebSearch ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="flex space-x-2">
+                  <button
+                    onClick={executeResearch}
+                    disabled={isProcessing || !researchPrompt.trim()}
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-4 py-3 font-semibold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-purple-500/30"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader className="w-5 h-5 animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5" />
+                        <span>Execute</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  <button
+                    onClick={clearResearch}
+                    disabled={isProcessing}
+                    className="px-4 py-3 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg transition-all"
+                    title="Clear research"
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Phase Status */}
+            <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <h2 className="text-lg font-bold mb-4 flex items-center">
+                <GitBranch className="w-5 h-5 mr-2 text-green-400" />
+                Pipeline Status
+              </h2>
+              <div className="space-y-2">
+                <PhaseIndicator phase="foundation" label="Foundation" />
+                <div className="flex items-center space-x-2 pl-4">
+                  <div className="w-px h-4 bg-slate-600"></div>
+                </div>
+                <PhaseIndicator phase="architecture" label="Architecture" />
+                <PhaseIndicator phase="implementation" label="Implementation" />
+                <PhaseIndicator phase="impact" label="Impact" />
+                <div className="flex items-center space-x-2 pl-4">
+                  <div className="w-px h-4 bg-slate-600"></div>
+                </div>
+                <PhaseIndicator phase="synthesis" label="Synthesis" />
+              </div>
+              
+              {isProcessing && (
+                <div className="mt-4 text-xs text-slate-400">
+                  <p className="flex items-center">
+                    <Sparkles className="w-3 h-3 mr-1 text-yellow-400" />
+                    Phases 2-4 run in parallel for 3x speed
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Saved Research */}
+            {savedResearch.length > 0 && (
+              <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-6 backdrop-blur">
+                <h2 className="text-lg font-bold mb-4 flex items-center">
+                  <Database className="w-5 h-5 mr-2 text-blue-400" />
+                  Recent Research
+                </h2>
+                <div className="space-y-2">
+                  {savedResearch.slice(0, 3).map((session, idx) => (
+                    <div key={idx} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 hover:border-purple-500/50 transition-all cursor-pointer">
+                      <p className="text-xs text-slate-300 line-clamp-2 mb-1">
+                        {session.prompt}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(session.timestamp).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Results Panel */}
+          <div className="col-span-2 space-y-4">
+            {/* System Logs */}
+            <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <h2 className="text-lg font-bold mb-4 flex items-center">
+                <Binary className="w-5 h-5 mr-2 text-green-400" />
+                System Logs
+              </h2>
+              <div className="bg-black rounded-lg p-4 font-mono text-xs max-h-48 overflow-y-auto">
+                {logs.length === 0 ? (
+                  <div className="text-slate-600">Awaiting research execution...</div>
+                ) : (
+                  logs.map((log, idx) => (
+                    <div key={idx} className={`mb-1 ${
+                      log.type === 'error' ? 'text-red-400' :
+                      log.type === 'success' ? 'text-green-400' :
+                      log.type === 'warning' ? 'text-yellow-400' :
+                      'text-slate-300'
+                    }`}>
+                      <span className="text-slate-600">[{log.timestamp}]</span> {log.message}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <h2 className="text-lg font-bold mb-4 flex items-center">
+                <FileText className="w-5 h-5 mr-2 text-purple-400" />
+                Research Results
+              </h2>
+              
+              {results.length === 0 ? (
+                <div className="text-center py-12">
+                  <Brain className="w-16 h-16 mx-auto mb-4 text-slate-700" />
+                  <p className="text-slate-400 mb-2">No results yet</p>
+                  <p className="text-slate-500 text-sm">Execute a research query to begin</p>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                  {results.map((result, idx) => (
+                    <div key={idx} className="border border-slate-700 rounded-lg overflow-hidden">
+                      <div className={`px-4 py-3 flex items-center justify-between ${
+                        result.phase === 'Foundation Research' ? 'bg-blue-900/30' :
+                        result.phase === 'Architecture' ? 'bg-purple-900/30' :
+                        result.phase === 'Implementation' ? 'bg-green-900/30' :
+                        result.phase === 'Impact' ? 'bg-yellow-900/30' :
+                        'bg-pink-900/30'
+                      }`}>
+                        <h3 className="font-bold flex items-center space-x-2">
+                          {result.phase === 'Foundation Research' && <Search className="w-4 h-4" />}
+                          {result.phase === 'Architecture' && <Layers className="w-4 h-4" />}
+                          {result.phase === 'Implementation' && <Code className="w-4 h-4" />}
+                          {result.phase === 'Impact' && <Globe className="w-4 h-4" />}
+                          {result.phase === 'Synthesis' && <Sparkles className="w-4 h-4" />}
+                          <span>{result.phase}</span>
+                        </h3>
+                        <div className="flex items-center space-x-3 text-xs">
+                          <span className="text-slate-400">{(result.time / 1000).toFixed(1)}s</span>
+                          <span className="text-slate-500">{new Date(result.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="px-4 py-3 bg-slate-950/50">
+                        <div className="bg-black rounded p-3 max-h-64 overflow-y-auto">
+                          <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono">
+                            {typeof result.output === 'object'
+                              ? JSON.stringify(result.output, null, 2)
+                              : result.output}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Key Improvements Banner */}
+            <div className="bg-gradient-to-r from-green-900/30 to-blue-900/30 border border-green-700/50 rounded-xl p-4 backdrop-blur">
+              <h3 className="font-bold text-green-300 text-sm mb-2 flex items-center">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                v2.0 Improvements
+              </h3>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 text-green-400" />
+                  <span className="text-slate-300">Parallel execution (3x faster)</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 text-green-400" />
+                  <span className="text-slate-300">Auto-retry with backoff</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 text-green-400" />
+                  <span className="text-slate-300">Persistent storage</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 text-green-400" />
+                  <span className="text-slate-300">Cost tracking</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 text-green-400" />
+                  <span className="text-slate-300">Real-time phase status</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CheckCircle className="w-3 h-3 text-green-400" />
+                  <span className="text-slate-300">Robust error handling</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-purple-800/30 bg-black/40 backdrop-blur-xl mt-8">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-slate-400">
+              <span className="font-semibold text-purple-300">NEXUS v2.0</span> - Production AGI Research Platform
+            </div>
+            <div className="flex items-center space-x-4 text-xs text-slate-500">
+              <div className="flex items-center space-x-1">
+                <Shield className="w-3 h-3 text-green-400" />
+                <span>Safety First</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Eye className="w-3 h-3 text-blue-400" />
+                <span>Transparent</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Zap className="w-3 h-3 text-yellow-400" />
+                <span>Optimized</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default NexusV2;
